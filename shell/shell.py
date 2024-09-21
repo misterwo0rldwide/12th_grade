@@ -1,7 +1,9 @@
 #  SHELL semulator python - Omer Kfir יב'3
 
-import subprocess, os, shutil
+import subprocess, os, shutil, sys
 from colorama import Fore, Style
+
+MY_PATH = ["F:\cyber-12th_grade\shell\scripts\\"]
 
 class CMD:
     
@@ -137,6 +139,24 @@ class CMD:
             else:
                 os.environ[variable_name] = environ_variable_value
     
+
+    def print_format(function):
+        """
+            Wrapper for function that need to be printed nicely
+        """
+
+        def wrapper(*args):
+            print()
+            function(*args)
+            print()
+
+        return wrapper
+
+
+    @print_format
+    def print_directory(self, directory):
+        print(*["<DIR>  " + entry.name if os.path.isdir(directory + entry.name) else "<FILE>  " + entry.name for entry in os.scandir(path=directory)], sep="\n")
+
     
     def get_directory_variables(self, directory) -> None:
         """
@@ -156,9 +176,7 @@ class CMD:
             print("\nDirectory does not exists\n")
             
         else:
-            print()
-            print(*["<DIR>  " + entry.name if os.path.isdir(directory + entry.name) else "<FILE>  " + entry.name for entry in os.scandir(path=directory)], sep="\n")
-            print()
+            self.print_directory(directory)
     
     
     def get_file_content(self, path) -> None:
@@ -232,7 +250,8 @@ class CMD:
             print("\nThe syntax of the command is incorrect.\n")
         
         else:
-            files = files[1:]
+            files = files[1]
+            files = files.split()
             
             for file in files:
                 
@@ -246,10 +265,75 @@ class CMD:
                         
                         if not os.path.isfile(file):
                             print(f"\nThe system cannot find {file} file.\n")
-                            continue
                         
-                        os.remove(file)
+                        else:
+                            os.remove(file)
             
+
+    def __print_help(self):
+        """
+            Calls all help functions
+        """
+
+        print("CD: ")
+        self.change_directory_help_screen()
+        
+        print("EXIT: ")
+        self.exit_help_screen()
+        
+        print("SET: ")
+        self.set_help_screen()
+        
+        print("DIR: ")
+        self.dir_help_screen()
+
+        print("TYPE: ")
+        self.type_help_screen()
+        
+        print("COPY: ")
+        self.copy_help_screen()
+        
+        print("DEL: ")
+        self.delete_help_screen()
+
+        print("HELP: ")
+        self.help_screen()
+
+    
+    def __help_table(self, command):
+        """
+            Calls the help function for each command
+        """
+
+        command = command[0]
+        command = command.lower()
+        
+        if command == "cd":
+            self.change_directory_help_screen()
+        
+        elif command == "exit":
+            self.exit_help_screen()
+        
+        elif command == "set":
+            self.set_help_screen()
+            
+        elif command == "dir":
+            self.dir_help_screen()
+        
+        elif command == "type":
+            self.type_help_screen()
+        
+        elif command == "copy":
+            self.copy_help_screen()
+        
+        elif command == "del":
+            self.delete_help_screen()
+        
+        elif command == "help":
+            self.help_screen()
+            
+        else:
+            self.help_screen_command_not_found()
 
 
     def get_help(self, command) -> None:
@@ -260,8 +344,9 @@ class CMD:
         if len(command) == 1:
             #  User typed only help
             #  Print help for all commands
-            pass
-    
+
+            self.__print_help()
+
         else:
             #  Print help for certain command
             
@@ -274,37 +359,7 @@ class CMD:
             
             else:
                 #  Print help screen for the different commands
-                
-                command = command[0]
-                command = command.lower()
-                
-                if command == "cd":
-                    self.change_directory_help_screen()
-                
-                elif command == "exit":
-                    self.exit_help_screen()
-                
-                elif command == "set":
-                    self.set_help_screen()
-                 
-                elif command == "dir":
-                    self.dir_help_screen()
-                
-                elif command == "type":
-                    self.type_help_screen()
-                
-                elif command == "copy":
-                    self.copy_help_screen()
-                
-                elif command == "del":
-                    self.delete_help_screen()
-                
-                elif command == "help":
-                    self.help_screen()
-                    
-                else:
-                    self.help_screen_command_not_found()
-                    
+                self.__help_table(command)    
         
         
     def command_not_exists(self, command) -> None:
@@ -391,6 +446,94 @@ class CMD:
         
         print("\nThis command is not supported by the help utility.\n")
 
+    
+    @print_format
+    def external_command_execute(self, userInput, path):
+        """
+            Executes an executble\script from the path
+        """
+        
+        args = []
+        command = path + "\\" + userInput[0]    
+        
+        #  Check if its a python script
+        if command.endswith("py"):
+            args.append("python")
+        
+        args.append(command)
+
+        #  If user has given args
+        if len(userInput) == 2:
+            args_execute = userInput[1]
+            args_execute = args_execute.split()
+
+            args += args_execute
+
+        subprocess.run(args=args, stdout=sys.stdout, cwd=self.currentPath)
+
+
+def activate_internal_command(currentCMD, command, userInput):
+    """
+        Buisness logic for internal commands
+    """
+
+    if command == "cd":
+        currentCMD.change_directory(userInput)
+    
+    elif command == "set":
+        currentCMD.set_environment_variables(userInput)
+    
+    elif command == "dir":
+        currentCMD.get_directory_variables(userInput)
+    
+    elif command == "type":
+        currentCMD.get_file_content(userInput)
+    
+    elif command == "copy":
+        currentCMD.copy_file(userInput)
+     
+    elif command == "del":
+        currentCMD.delete_files(userInput)
+    
+    elif command == "help":
+        currentCMD.get_help(userInput)
+
+
+def activate_external_commands(currentCMD, userInput, path):
+    """
+        Activates the external command
+    """
+    
+    currentCMD.external_command_execute(userInput, path)
+
+
+def command_in_path(command):
+    """
+        Searches the external command in the 'MY_PATH'
+    """
+    
+    for directory in MY_PATH:
+    
+        if os.path.isfile(directory + command):
+            return directory
+    
+    return ""
+
+
+def get_user_input():
+    """
+        Gets user command line command
+    """
+    
+    userInput = input()
+    userInput = userInput.split(' ', 1)
+    userInput[0] = userInput[0].lower()
+
+    #  Check if args starts with \ (does problems)
+    if len(userInput) == 2 and userInput[1].startswith("\\"):
+        userInput[1] = userInput[1][1:]
+    
+    return userInput
 
 def user_requests(currentCMD: CMD) -> None:
     """
@@ -399,34 +542,21 @@ def user_requests(currentCMD: CMD) -> None:
     
     currentCMD.print_prompt()
     
-    userInput = input()
-    userInput = userInput.split(' ', 1)
-    userInput[0] = userInput[0].lower()
+    userInput = get_user_input()
     command = userInput[0]
+    
+    internal_commands = ["cd", "set", "dir", "type", "copy", "del", "help"]
     
     while command != "exit":
         #  Buisness logic
         
-        if command == "cd":
-            currentCMD.change_directory(userInput)
+        path = command_in_path(command)
+
+        if command in internal_commands:
+            activate_internal_command(currentCMD, command, userInput)
         
-        elif command == "set":
-            currentCMD.set_environment_variables(userInput)
-        
-        elif command == "dir":
-            currentCMD.get_directory_variables(userInput)
-        
-        elif command == "type":
-            currentCMD.get_file_content(userInput)
-        
-        elif command == "copy":
-            currentCMD.copy_file(userInput)
-         
-        elif command == "del":
-            currentCMD.delete_files(userInput)
-        
-        elif command == "help":
-            currentCMD.get_help(userInput)
+        elif path != "":
+            activate_external_commands(currentCMD, userInput, path)
         
         else:
             currentCMD.command_not_exists(command)
@@ -434,9 +564,7 @@ def user_requests(currentCMD: CMD) -> None:
 
         currentCMD.print_prompt()
         
-        userInput = input()
-        userInput = userInput.split(' ', 1)
-        userInput[0] = userInput[0].lower()    
+        userInput = get_user_input()    
         command = userInput[0]
 
 
