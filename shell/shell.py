@@ -1,30 +1,201 @@
 #  SHELL semulator python - Omer Kfir יב'3
 
-import subprocess, os, shutil, sys
+import subprocess, os, shutil, sys, re
 from colorama import Fore, Style
 
-MY_PATH = ["F:\cyber-12th_grade\shell\scripts\\"]
+MY_PATH = [os.getcwd() + "\\" + "scripts\\"]
+internal_commands = ["cd", "set", "dir", "type", "copy", "del", "help"]
+currentPath = ""
 
-class CMD:
+
+class CMDcommand:
     
-    #  Current cmd variables
-    userName = ""
-    computerName = ""
-    currentPath = ""
+    stdout = None
+    stdin = None
+    stderr = None
+    proc_stdout = None
     
-    def __init__(self, userName=os.environ['USERNAME'], computerName=os.environ['COMPUTERNAME'], currentPath=os.getcwd()):
+    
+    def __init__(self, stdout, stdin, stderr):
         
-        self.userName = userName
-        self.computerName = computerName
-        self.currentPath = currentPath
+        self.stdout = stdout
+        self.stdin = stdin
+        self.stderr = stderr
+    
+    
+    def _execute():
+        pass
         
-        
-    def print_prompt(self) -> None:
+
+
+class dirCommand(CMDcommand):
+    
+    args = ""
+    
+    def __init__(self, stdout, stdin, stderr, args):
+        super().__init__(stdout, stdin, stderr)
+        self.args = args
+
+
+    def __list_directories(self, path):
         """
-            Prints the cmd prompt before every input from user
+            List all directories in a path
         """
         
-        print(fr"{Fore.GREEN}{self.userName}@{self.computerName}{Fore.WHITE}:{Fore.LIGHTBLUE_EX}\{self.currentPath}{Style.RESET_ALL}$", end=" ")
+        directories = []
+        
+        try:
+            os.listdir(path)
+        
+        except PermissionError as e:
+            self.stderr += e
+            return -1
+        
+        for d in os.listdir(path):
+            
+            try:
+            
+                if os.path.isdir(os.path.join(path, d)):
+                    directories.append(d)
+            
+            except PermissionError as e:
+                self.stderr += e
+        
+        return directories
+
+
+    def print_directory(self, directory, regex_search) -> str:
+        """
+            Print all directory files, directories
+        """
+        
+        lst_directory = []
+    
+        for entry in os.scandir(path=directory):
+            
+            #  If user didnt specify any regex_search
+            if regex_search == "":
+            
+                if os.path.isdir(directory + entry.name):
+                    lst_directory.append("<DIR>  " + entry.name)
+                
+                else:
+                    lst_directory.append("<FILE>  " + entry.name)
+            
+            else:
+                
+                if os.path.isfile(directory + "\\" + entry.name) and re.search(regex_search, entry.name):
+                    lst_directory.append("<FILE>  " + entry.name)
+            
+    
+        return lst_directory
+
+    
+    def print_all_subdirectories(self, path, regex_search):
+        """
+            Prints the info of all subdirectories
+        """
+        
+        directories = self.__list_directories(path)
+        lst_directory = self.print_directory(path, regex_search)
+
+        if lst_directory:
+            self.stdout += f"\n  Directory of {path}\n"
+            self.stdout += "\n".join(lst_directory)
+        
+        if directories != -1 and len(directories) != 0:
+            
+            for directory in directories:
+                new_path = path + "\\" + directory
+                self.print_all_subdirectories(new_path, regex_search)
+
+
+
+    def __convert_wildcard_to_regex(self, wildcard):
+        """
+            Convert cmd wildcard to valid regex
+        """
+
+        regex_pattern = wildcard.replace('*', '.*')
+        regex_pattern = regex_pattern.replace('.', r'\.')
+
+        return regex_pattern
+
+
+    def _execute(self) -> None:
+        """
+            'dir' command in windows, prints directory information
+        """
+        
+        self.args = self.args
+        directory_search = ""
+        regex_search = ""
+        flag = ""
+        wild_card = "."
+        self.args = self.args.split()
+        
+        if len(self.args) > 3:
+            self.stderr = "The syntax of the command is incorrect.\n"
+            return
+        
+        
+        if len(self.args) > 0:    
+            #  We only have one flag so we can find it only by its name
+            if "/S" in self.args:
+                flag = self.args.index("/S")
+                flag = self.args[flag]
+                self.args.remove(flag)
+
+            #  Find the regex, it will have to specify a dot
+            regex_search = next((i for i, s in enumerate(self.args) if wild_card in s), -1)
+            
+            #  If found regex specified by user
+            if regex_search != -1:
+                regex_search = self.args[regex_search]
+                self.args.remove(regex_search)
+            
+            else:
+                regex_search = ""
+
+            #  If user specified path
+            if self.args:
+                directory_search = self.args[0]
+        
+        regex_search = self.__convert_wildcard_to_regex(regex_search)
+        
+        #  If path is nothing
+        if directory_search == "":
+            directory_search = currentPath
+        
+        #  Check wether its a valid path
+        if not os.path.isdir(directory_search):
+            #  If not a valid path we try to add full path to see if user input local path
+            
+            directory_search = currentPath + "\\" + directory_search + "\\"
+        
+            #  Strictly not valid path
+            if not os.path.isdir(directory_search):
+                self.stderr = "\nDirectory does not exists\n"
+                return
+            
+        #  Recurive 'dir' command
+        if flag == "/S":
+            self.print_all_subdirectories(directory_search, regex_search)
+        
+        else:
+            lst_directory = self.print_directory(directory_search, regex_search)
+            
+            if lst_directory:
+                self.stdout = "\n".join(lst_directory)
+        
+        
+class cd(CMDcommand):
+
+    args = ""
+    
+    def __init__(self, stdout, stdin, stderr, args):
+        super().__init__(stdout, stdin, stderr)
+        self.args = args
     
     
     def __parse_path(self, path) -> str:
@@ -46,58 +217,69 @@ class CMD:
         return build_path
 
     
-    def change_directory(self, destination) -> None:
+    def _execute(self) -> None:
         """
             Changes current working directory to be destination
         """
         
+        global currentPath
+        
         #  If destination is None print the current working directory
         
-        if len(destination) == 1:
-            #  cd command without argss
-            print(self.currentPath)
+        if len(self.args) == 0:
+            #  cd command without args
+            self.stdout = currentPath
         
         else:
             
             #  Check if its a valid directory
             #  We also check for user_path since it can be a full path
             
-            fullPath = os.path.join(self.currentPath, destination[1])
-            user_path = destination[1]
+            fullPath = os.path.join(currentPath, self.args)
+            user_path = self.args
             
             if os.path.isdir(fullPath):
                     
-                self.currentPath = self.__parse_path(fullPath)
+                currentPath = self.__parse_path(fullPath)
             
             elif os.path.isdir(user_path):
             
-                self.currentPath = self.__parse_path(user_path)
+                currentPath = self.__parse_path(user_path)
             
             elif os.path.isfile(fullPath):
-                print("The directory name is invalid.")
+                self.stderr += "The directory name is invalid."
                
             elif os.path.isfile(user_path):
-                print("The directory name is invalid.")
+                self.stderr += "The directory name is invalid."
             
             else:
-                print("The system cannot find the path specified.")
+                self.stderr += "The system cannot find the path specified."
     
     
-    def set_environment_variables(self, variable) -> None:
+class setCommand(CMDcommand):
+
+    args = ""
+    
+    def __init__(self, stdout, stdin, stderr, args):
+        super().__init__(stdout, stdin, stderr)
+        self.args = args
+    
+    
+    def _execute(self) -> None:
         """
             'set' command in windows, handles environment variables
         """
         
-        if len(variable) == 1:
+        if len(self.args) == 0:
             #  set command without args
-            print(*[f"{key}={value}" for key, value in os.environ.items()], sep='\n')
+            self.stdout = "\n".join([f"{key}={value}" for key, value in os.environ.items()])
             return
         
         
         #  The set command does not split by whitespace
         #  It splits by the equal char
         
-        environ_variable = variable[1].split("=")
+        environ_variable = self.args.split("=")
         variable_name = environ_variable[0]
         
         if len(environ_variable) == 1:
@@ -112,10 +294,10 @@ class CMD:
                         variable_name = key
                         break
                 
-                print(f"{variable_name}={content}")
+                self.stdout = f"{variable_name}={content}"
             
             except KeyError:
-                print(f"Environment variable {variable_name} not defined")
+                self.stderr = f"Environment variable {variable_name} not defined"
         
         else:
             
@@ -137,62 +319,31 @@ class CMD:
                     pass
             
             else:
-                os.environ[variable_name] = environ_variable_value
+                os.environ[variable_name] = environ_variable_value 
+
+
+class typeCommand(CMDcommand):
+
+    args = ""
     
-
-    def print_format(function):
-        """
-            Wrapper for function that need to be printed nicely
-        """
-
-        def wrapper(*args):
-            print()
-            function(*args)
-            print()
-
-        return wrapper
-
-
-    @print_format
-    def print_directory(self, directory):
-        print(*["<DIR>  " + entry.name if os.path.isdir(directory + entry.name) else "<FILE>  " + entry.name for entry in os.scandir(path=directory)], sep="\n")
-
-    
-    def get_directory_variables(self, directory) -> None:
-        """
-            'dir' command in windows, prints directory information
-        """
-        
-        if len(directory) == 1:
-            directory = self.currentPath + "\\" + "."
-        
-        else:
-            directory = directory[1]
-
-        if not os.path.isdir(directory):
-            directory = self.currentPath + "\\" + directory + "\\"
-        
-        if not os.path.isdir(directory):
-            print("\nDirectory does not exists\n")
-            
-        else:
-            self.print_directory(directory)
+    def __init__(self, stdout, stdin, stderr, args):
+        super().__init__(stdout, stdin, stderr)
+        self.args = args
     
     
-    def get_file_content(self, path) -> None:
+    def _execute(self) -> None:
         """
             'type' command in windows, prints directory information
         """
         
-        if len(path) == 1:
-            print("The syntax of the command is incorrect.\n")
+        if len(self.args) == 0:
+            self.stdout = "The syntax of the command is incorrect.\n"
         
         else:
             #  Path can be a couple of files
-            path = path[1]
-            path = path.split()
+            self.args = self.args.split()
             
-            for file in path:
+            for file in self.args:
                 
                 #  We will also support ',' seperation
                 for file in file.split(','):
@@ -200,58 +351,74 @@ class CMD:
                     if file != "":
                         
                         if not os.path.isfile(file):
-                            file = self.currentPath + "\\" + file
+                            file = currentPath + "\\" + file
                         
                         if not os.path.isfile(file):
-                            print(f"\nThe system cannot find the file specified.\nError occurred while processing: {file}.\n")
+                            self.stderr += f"\nThe system cannot find the file specified.\nError occurred while processing: {file}.\n"
                             continue
                         
                         with open(file, 'r') as f:
-                            print(f.read())
+                            self.stdout += f.read() + "\n"
 
 
-    def copy_file(self, files) -> None:
+class copy(CMDcommand):
+
+    args = ""
+    
+    def __init__(self, stdout, stdin, stderr, args):
+        super().__init__(stdout, stdin, stderr)
+        self.args = args
+    
+    
+    def _execute(self) -> None:
         """
             'copy' command in windows, copies one file to another location
         """
         
-        files = files[1]
-        files = files.split()
+        self.args = self.args.split()
         
-        if len(files) < 2:
-            print("\nThe syntax of the command is incorrect.\n")
+        if len(self.args) < 2:
+            self.stderr = "\nThe syntax of the command is incorrect.\n"
         
         else:
             #  Copy all files to the destination directory
             
-            destination = files[1]
-            file = files[0]
+            destination = self.args[1]
+            file = self.args[0]
             
             #  Check if a directory, if so check if directory exists
-            if "\\" in destination and not os.path.isdir(destination) and not os.path.isdir(self.currentPath + destination):
-                print("\nThe system cannot find the directory specified.\n")
+            if "\\" in destination and not os.path.isdir(destination) and not os.path.isdir(currentPath + destination):
+                self.stderr = "\nThe system cannot find the directory specified.\n"
                 return
                 
             #  Check if the file is infact a file
-            if not os.path.isfile(file) and not os.path.isfile(self.currentPath + file):
-                print("\nThe system cannot find the file specified.\n")
+            if not os.path.isfile(file) and not os.path.isfile(currentPath + file):
+                self.stderr = "\nThe system cannot find the file specified.\n"
                 return
             
             shutil.copy(file, destination)
-            print("\n        1 file copied.\n")
-     
+            self.stdin = "\n        1 file copied.\n"
+
+
+class delCommand(CMDcommand):
     
-    def delete_files(self, files):
+    args = ""
+    
+    def __init__(self, stdout, stdin, stderr, args):
+        super().__init__(stdout, stdin, stderr)
+        self.args = args
+    
+    
+    def _execute(self):
         """
             'del' command in windows, copies one file to another location
         """
         
-        if len(files) == 1:
-            print("\nThe syntax of the command is incorrect.\n")
+        if len(self.args) == 0:
+            self.stderr = "\nThe syntax of the command is incorrect.\n"
         
         else:
-            files = files[1]
-            files = files.split()
+            files = self.args.split()
             
             for file in files:
                 
@@ -261,42 +428,51 @@ class CMD:
                     if file != "":
                         
                         if "\\" not in file:
-                            file = self.currentPath + "\\" + file
+                            file = currentPath + "\\" + file
                         
                         if not os.path.isfile(file):
-                            print(f"\nThe system cannot find {file} file.\n")
+                            self.stderr = f"\nThe system cannot find {file} file.\n"
                         
                         else:
                             os.remove(file)
             
+
+class helpCommand(CMDcommand):
+
+    args = ""
+    
+    def __init__(self, stdout, stdin, stderr, args):
+        super().__init__(stdout, stdin, stderr)
+        self.args = args
+
 
     def __print_help(self):
         """
             Calls all help functions
         """
 
-        print("CD: ")
+        self.stdout += "CD: \n"
         self.change_directory_help_screen()
         
-        print("EXIT: ")
+        self.stdout += "EXIT: \n"
         self.exit_help_screen()
         
-        print("SET: ")
+        self.stdout += "SET: \n"
         self.set_help_screen()
         
-        print("DIR: ")
+        self.stdout += "DIR: \n"
         self.dir_help_screen()
 
-        print("TYPE: ")
+        self.stdout += "TYPE: \n"
         self.type_help_screen()
         
-        print("COPY: ")
+        self.stdout += "COPY: \n"
         self.copy_help_screen()
         
-        print("DEL: ")
+        self.stdout += "DEL: \n"
         self.delete_help_screen()
 
-        print("HELP: ")
+        self.stdout += "HELP: \n"
         self.help_screen()
 
     
@@ -336,12 +512,12 @@ class CMD:
             self.help_screen_command_not_found()
 
 
-    def get_help(self, command) -> None:
+    def _execute(self) -> None:
         """
             Prints help on how to use different commands
         """
         
-        if len(command) == 1:
+        if len(self.args) == 0:
             #  User typed only help
             #  Print help for all commands
 
@@ -350,8 +526,7 @@ class CMD:
         else:
             #  Print help for certain command
             
-            command = command[1]
-            command = command.split()
+            command = self.args.split()
             
             #  Check for more then two commands (Not valid usage)
             if len(command) > 1:
@@ -367,7 +542,7 @@ class CMD:
             Print Error message, command does not exists
         """
         
-        print(f"'{command}' is not recognized as an internal or external command or operable program")
+        self.stdout += f"'{command}' is not recognized as an internal or external command or operable program"
 
 
     def help_screen(self):
@@ -375,8 +550,8 @@ class CMD:
             Prints help window to the help command
         """
         
-        print("\nProvides help information for OK commands.\n\nHELP [command]\n\n" \
-              "    command - displays help information on that command.\n")
+        self.stdout += "\nProvides help information for OK commands.\n\nHELP [command]\n\n" \
+              "    command - displays help information on that command.\n"
     
     
     def change_directory_help_screen(self):
@@ -384,8 +559,8 @@ class CMD:
             Prints help window to the cd command
         """
         
-        print("\nDisplays the name of or changes the current directory.\n\nCD [..]\n\n" \
-              "    Type CD without parameters to display the current drive and directory.\n")
+        self.stdout += "\nDisplays the name of or changes the current directory.\n\nCD [..]\n\n" \
+              "    Type CD without parameters to display the current drive and directory.\n"
     
     
     def exit_help_screen(self):
@@ -393,7 +568,7 @@ class CMD:
             Prints help window to the exit command
         """
         
-        print("\nQuits the CMD.EXE program (command interpreter)\n")
+        self.stdout += "\nQuits the CMD.EXE program (command interpreter)\n"
 
 
     def set_help_screen(self):
@@ -401,10 +576,10 @@ class CMD:
             Prints help window to the set command
         """
         
-        print("\nDisplays, sets, or removes cmd.exe environment variables.\n\nSET [variable=[string]]\n" \
+        self.stdout += "\nDisplays, sets, or removes cmd.exe environment variables.\n\nSET [variable=[string]]\n" \
               "    variable  Specifies the environment-variable name.\n" \
               "    string    Specifies a series of characters to assign to the variable.\n\n" \
-              "Type SET without parameters to display the current environment variables.\n")
+              "Type SET without parameters to display the current environment variables.\n"
     
     
     def dir_help_screen(self):
@@ -412,7 +587,8 @@ class CMD:
             Prints help window to the dir command
         """
         
-        print("\nDisplays a list of files and subdirectories in a directory.\n\n    DIR [path]\n")
+        self.stdout += "\nDisplays a list of files and subdirectories in a directory.\n\n    DIR [path]\n" \
+              "\n/S          Displays files in specified directory and all subdirectories.\n"
     
     
     def type_help_screen(self):
@@ -420,7 +596,7 @@ class CMD:
             Prints help window to the dir command
         """
         
-        print("\nDisplays the contents of a text file or files.\n\n    TYPE [path]filename\n")
+        self.stdout += "\nDisplays the contents of a text file or files.\n\n    TYPE [path]filename\n"
     
     
     def copy_help_screen(self):
@@ -428,7 +604,7 @@ class CMD:
             Prints help window to the copy command
         """
         
-        print("\nCopies one or more files to another location.\n\n    COPY source destination\n")
+        self.stdout += "\nCopies one or more files to another location.\n\n    COPY source destination\n"
     
     
     def delete_help_screen(self):
@@ -436,7 +612,7 @@ class CMD:
             Prints help window to the delete command
         """
         
-        print("\nDeletes one or more files.\n\n    DEL names\n")
+        self.stdout += "\nDeletes one or more files.\n\n    DEL names\n"
     
 
     def help_screen_command_not_found(self):
@@ -444,67 +620,99 @@ class CMD:
             Prints command not found in help format
         """
         
-        print("\nThis command is not supported by the help utility.\n")
-
+        self.stdout += "\nThis command is not supported by the help utility.\n"
     
-    @print_format
-    def external_command_execute(self, userInput, path):
+
+class executableCMD(CMDcommand):
+
+    args = ""
+    
+    def __init__(self, stdout, stdin, stderr, args, pipe_next, prev_proc):
+        super().__init__(stdout, stdin, stderr)
+        self.args = args
+        self.pipe_next = pipe_next
+        self.prev_proc = prev_proc
+        
+
+    def _execute(self):
         """
-            Executes an executble\script from the path
+            Executes an executble with specified path
         """
         
-        args = []
-        command = path + "\\" + userInput[0]    
-        
-        #  Check if its a python script
-        if command.endswith("py"):
-            args.append("python")
-        
-        args.append(command)
+        try:
+            
+            std = None
+            if self.stdin != None and self.stdin != "":
+                std = self.stdin
+            elif self.prev_proc != None:
+                std = self.prev_proc.stdout
 
-        #  If user has given args
-        if len(userInput) == 2:
-            args_execute = userInput[1]
-            args_execute = args_execute.split()
+            proc = subprocess.Popen(args=self.args, stdin=std, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, shell=True)
 
-            args += args_execute
+            if self.prev_proc != None:
+                self.prev_proc.stdout.close()
 
-        subprocess.run(args=args, stdout=sys.stdout, cwd=self.currentPath)
+            if self.pipe_next == ">":
+                self.stdout = ""
+                for line in proc.stdout:
+                    self.stdout += line
 
+            elif self.pipe_next == "":
+                for line in proc.stdout:
+                    print(line, end="")
 
-def activate_internal_command(currentCMD, command, userInput):
+            return proc
+
+        except FileNotFoundError as e:
+            self.stderr += str(e)
+
+def activate_command(command, args, stdin, pipe_next, prev_proc) -> CMDcommand:
     """
         Buisness logic for internal commands
     """
 
+    obj = ""
+    path = command_in_path(command + ".py")
+
     if command == "cd":
-        currentCMD.change_directory(userInput)
+        obj = cd("", stdin, "", args)
     
     elif command == "set":
-        currentCMD.set_environment_variables(userInput)
+        obj = setCommand("", stdin, "", args)
     
     elif command == "dir":
-        currentCMD.get_directory_variables(userInput)
+        obj = dirCommand("", stdin, "", args)
     
     elif command == "type":
-        currentCMD.get_file_content(userInput)
+        obj = typeCommand("", stdin, "", args)
     
     elif command == "copy":
-        currentCMD.copy_file(userInput)
+        obj = copy("", stdin, "", args)
      
     elif command == "del":
-        currentCMD.delete_files(userInput)
+        obj = delCommand("", stdin, "", args)
     
     elif command == "help":
-        currentCMD.get_help(userInput)
-
-
-def activate_external_commands(currentCMD, userInput, path):
-    """
-        Activates the external command
-    """
+        obj = helpCommand("", stdin, "", args)
     
-    currentCMD.external_command_execute(userInput, path)
+    elif path != "":
+        stdin = stdin if stdin != "" else None
+        obj = executableCMD(None, stdin, None, "python " + path + "\\" + command + ".py " + args, pipe_next, prev_proc)
+    
+    else:
+        stdin = stdin if stdin != "" else None
+        obj = executableCMD(None, stdin, None, command + " " + args, pipe_next, prev_proc)
+
+    return obj
+
+
+def spill_input_to_redirect(filePath, stdin):
+    """
+        Handles redirect of type '>'
+    """
+
+    with open(filePath, "w", encoding="utf-8") as file:
+        file.write(stdin)
 
 
 def command_in_path(command):
@@ -520,57 +728,99 @@ def command_in_path(command):
     return ""
 
 
-def get_user_input():
+def print_prompt(userName, computerName, currentPath) -> None:
     """
-        Gets user command line command
+        Prints the cmd prompt before every input from user
     """
     
-    userInput = input()
-    userInput = userInput.split(' ', 1)
-    userInput[0] = userInput[0].lower()
+    print(fr"{Fore.GREEN}{userName}@{computerName}{Fore.WHITE}:{Fore.LIGHTBLUE_EX}\{currentPath}{Style.RESET_ALL}$", end=" ")
 
-    #  Check if args starts with \ (does problems)
-    if len(userInput) == 2 and userInput[1].startswith("\\"):
-        userInput[1] = userInput[1][1:]
+
+def parse_command(command) -> tuple:
+    """
+        Returns a command split into command and args
+    """
     
-    return userInput
+    command = command.lstrip().split(" ", 1)
+    args = command[1] if len(command) == 2 else ""
+    command = command[0]
+    
+    return command, args
 
-def user_requests(currentCMD: CMD) -> None:
+
+def restore_default():
+    """
+        Returns the default variables form
+    """
+
+    prev_command = CMDcommand("", "", "")
+    prev_delimiter = ""
+    ret_proc = None
+
+    return prev_command, prev_delimiter, ret_proc
+
+def user_requests() -> None:
     """
         Handle user requests in the terminal
     """
     
-    currentCMD.print_prompt()
+    global currentPath
     
-    userInput = get_user_input()
-    command = userInput[0]
+    userName=os.environ['USERNAME']
+    computerName=os.environ['COMPUTERNAME']
+    currentPath=os.getcwd()
     
-    internal_commands = ["cd", "set", "dir", "type", "copy", "del", "help"]
+    pattern = r'([^|><]+)([|><]?)'
     
-    while command != "exit":
-        #  Buisness logic
-        
-        path = command_in_path(command)
+    while True:
+        print_prompt(userName, computerName, currentPath)
+        commands = re.findall(pattern ,input())
 
-        if command in internal_commands:
-            activate_internal_command(currentCMD, command, userInput)
-        
-        elif path != "":
-            activate_external_commands(currentCMD, userInput, path)
-        
-        else:
-            currentCMD.command_not_exists(command)
+        prev_command, prev_delimiter, ret_proc = restore_default()
+    
+        for index, command in enumerate(commands):
 
+            command, delimiter = command
+            comm, args = parse_command(command)
+            
+            if comm == "exit":
+                return
+            
+            if prev_delimiter == ">":
+                spill_input_to_redirect(comm, prev_command.stdout)
+                prev_command, prev_delimiter, ret_proc = restore_default()
 
-        currentCMD.print_prompt()
+            else:
+                prev_command = activate_command(comm.lower(), args, prev_command.stdout, delimiter, ret_proc)
+                ret_proc = prev_command._execute()
+
+            prev_delimiter = delimiter
+
+        if prev_command.stdout != None:
+            print(prev_command.stdout, prev_command.stderr)
         
-        userInput = get_user_input()    
-        command = userInput[0]
+        elif ret_proc.wait():
+            output, err = ret_proc.communicate()
+            print(output, err)
+                
 
 
 def print_giraffe():
-    with open('ascii.txt', 'r') as f:
+    """
+        Prints the start logo of this shell
+    """
+
+    with open('giraffe.txt', 'r') as f:
         print(f.read())
+
+
+def print_dragon():
+    """
+        Prints the end logo of this shell
+    """
+
+    with open('dragon.txt', 'r') as f:
+        print("\n\n\n" + f.read() + "\n\n\n")
 
 
 def main():
@@ -578,9 +828,10 @@ def main():
           "(c) Ophir Shavit Corporation. All rights reserved.\n\n")
     
     print_giraffe()
-    cmd = CMD()
+
+    user_requests()
     
-    user_requests(cmd)
+    print_dragon()
     
 
 if __name__ == "__main__":
