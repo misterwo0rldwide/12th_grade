@@ -191,6 +191,7 @@ void md5Step(uint32_t *buffer, uint32_t *input){
     buffer[3] += DD;
 }
 
+
 /*
  * Functions that run the algorithm on the provided input and put the digest into result.
  * result should be able to store 16 bytes.
@@ -202,4 +203,70 @@ void md5String(char *input, uint8_t *result){
     md5Finalize(&ctx);
 
     memcpy(result, ctx.digest, 16);
+}
+
+void md5Compare(unsigned long long start, unsigned long long end, uint8_t *targetHash) {
+    for(; start < end; start++) {
+        char numberStr[11];  // Buffer for a 10-character string + null terminator
+
+        // Format the number as a 10-character string, padded with leading zeros
+        snprintf(numberStr, sizeof(numberStr), "%010llu", start);
+
+        // Compute the MD5 hash of the numberStr
+        uint8_t hash[16];
+        md5String(numberStr, hash);
+
+        // Compare the computed hash with the targetHash
+        if(!memcmp(hash, targetHash, 16)) {
+            printf("%s", numberStr);
+            return;  // Return the matching number
+        }
+    }
+    return;
+}
+
+
+unsigned long long stoi(char *number)
+{
+	unsigned long long num = 0;
+	
+	while (*number)
+	{
+		num = num * 10 + *number - '0';
+		number++;
+	}
+	
+	return num;
+}
+
+
+void hex_string_to_uint8(const char* hex_string, uint8_t* byte_array) {
+    size_t len = strlen(hex_string);
+    if (len % 2 != 0) {
+        fprintf(stderr, "Hex string must have an even length.\n");
+        return; // Error handling
+    }
+
+    size_t byte_length = len / 2; // Calculate the number of bytes
+
+    for (size_t i = 0; i < byte_length; i++) {
+        // Convert each pair of hex characters to a byte
+        sscanf(hex_string + (i * 2), "%2hhx", &byte_array[i]);
+    }
+}
+
+int main(int argc, char *argv[])
+{
+	//  Assume argv is [hash result, start, end]
+    const char* hex_string = argv[1];
+    uint8_t byte_array[16];
+	
+	hex_string_to_uint8(hex_string, byte_array);
+	
+	unsigned long long start = stoi(argv[2]);
+	unsigned long long end = stoi(argv[3]);
+	
+	md5Compare(start, end, byte_array);
+	
+	return 0;
 }
