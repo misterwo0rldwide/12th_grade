@@ -1,0 +1,2 @@
+On every host machine this project will run we need to insure the local machine and the virtual machine do not block each other
+using the firewall, This could lead to unexpected behaviour such as socket can't seem to find each other.
