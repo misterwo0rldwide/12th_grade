@@ -12,7 +12,20 @@ write_event = threading.Event()
 counting_lock = threading.Lock()
 threads_finished = 0
 
-def shoot_the_opps(index):
+def calculate_operation(index):
+    
+    #  Take value inside the index
+    val_index = rand_lst[index]
+    
+    #  Take value before and after the index in cyclic order
+    val_before = rand_lst[(index - 1) % arr_size]
+    val_after = rand_lst[(index + 1) % arr_size]
+    
+    
+    
+    
+
+def operate(index):
     global threads_finished
     
     for _ in range(int(sys.argv[1])):
