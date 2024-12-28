@@ -1,0 +1,8 @@
+https://github.com/abysamross/simple-linux-kernel-tcp-client-server/blob/master/network_client.c - network client in kernel module
+digital whisper -
+https://www.digitalwhisper.co.il/files/Zines/0x7C/DW124-5-LinuxKernelKeyLogger.pdf
+https://www.digitalwhisper.co.il/files/Zines/0x7D/DW125-2-LinuxRootkit-Part2.pdf
+https://digitalwhisper.co.il/files/Zines/0xA5/DW165-3-LinuxNetworkRootkit.pdf
+books -
+https://bootlin.com/doc/books/ldd3.pdf
+https://www.doc-developpement-durable.org/file/Projets-informatiques/cours-&-manuels-informatiques/Linux/Linux%20Kernel%20Development,%203rd%20Edition.pdf
