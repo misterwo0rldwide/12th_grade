@@ -11,8 +11,10 @@
 
 #define HOOK_PROCESS_EXIT "do_exit"
 #define HOOK_PROCESS_FORK "kernel_clone" // Originally named 'do_fork'
-				 // Linux newer versions use 'kernel clone'
-#define HOOK_FILE_OPEN "__x64_sys_open"
+					 // Linux newer versions use 'kernel clone'
+/* #define HOOK_FILE_OPEN "do_sys_openat" - Not used, OS opens files frequently
+ * 				 	    Hooking such function will crash the computer
+ */
 
 #define MAX_FILE_NAME_LENGTH 256
 
@@ -20,96 +22,105 @@ MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Omer Kfir");
 MODULE_DESCRIPTION("Final project");
 
-static struct kprobe kp_do_fork;
-static struct kprobe kp_do_exit;
-static struct kprobe kp_sys_open;
+static int handler_pre_do_fork(struct kprobe*, struct pt_regs*);
+static int handler_pre_do_exit(struct kprobe*, struct pt_regs*);
+static int register_probes(void);
+static void unregister_probes(int);
+
+typedef enum {kp_do_fork, kp_do_exit, PROBES_SIZE} kernel_probes;
+
+/* Kprobes structures */
+static struct kprobe kps[PROBES_SIZE] = {0};
 
 /* Fork hook */
 static int handler_pre_do_fork(struct kprobe *kp, struct pt_regs *regs)
 {
-	//printk(KERN_INFO "do fork was called: process name = %s\n", current->comm);
+	printk(KERN_INFO "do fork was called: process name = %s\n", current->comm);
 	return 0;
 }
 
 /* Process termination hook */
 static int handler_pre_do_exit(struct kprobe *kp, struct pt_regs *regs)
 {
-	//printk(KERN_INFO "do exit was called: process name = %s\n", current->comm);
+	printk(KERN_INFO "do exit was called: process name = %s\n", current->comm);
 	return 0;
 }
 
-/* Process opens a file hook */
-static int handler_pre_sys_open(struct kprobe *kp, struct pt_regs *regs)
+/* Register all hooks */
+static int register_probes(void)
 {
-	/* Buffer to store file name */
-	char fname[MAX_FILE_NAME_LENGTH];
-	int ret;
+	/* ret variable for returning value of init function */
+        int ret;
 
-	ret = strncpy_from_user(fname, (char __user *)regs->di, MAX_FILE_NAME_LENGTH - 1);
-	if (ret < 0)
-	{
-		printk(KERN_INFO "Failed to copy file name from user\n");
-		return -EFAULT;
+        /* Set up creation of new processes function */
+        kps[kp_do_fork].pre_handler = handler_pre_do_fork;
+        kps[kp_do_fork].symbol_name = HOOK_PROCESS_FORK;
+
+        /* Registering kprobe, which sets up an interrupt before calling function */
+        ret = register_kprobe(&kps[kp_do_fork]);
+        if (ret < 0) // Error
+        {
+                printk(KERN_INFO "Failed to register do_fork,goodbye\n");
+                goto end;
+        }
+
+        /* Set up termination of process function */
+        kps[kp_do_exit].pre_handler = handler_pre_do_exit;
+        kps[kp_do_exit].symbol_name = HOOK_PROCESS_EXIT;
+
+        ret = register_kprobe(&kps[kp_do_exit]);
+        if (ret < 0)
+        {
+                unregister_probes(kp_do_exit);
+                printk(KERN_INFO "Failed to register do_exit, bey bye\n");
+                goto end;
+        }
+
+        printk(KERN_INFO "Finished hooking succusfully\n");
+end:
+        return ret;
+
+}
+
+/* Unregister all kprobes */
+static void unregister_probes(int max_probes)
+{
+	/* Static char to indicate if already unregistered */
+	static atomic_t unreg_kprobes = ATOMIC_INIT(0); // Use atomic to avoid race condition
+
+	/* Check if it has been set to 1, if not set it to one */
+	if (atomic_cmpxchg(&unreg_kprobes, 0, 1) == 0)
+	{	
+		/* Create i variable
+		 * While it's not a good practice to 
+		 * put it inside of a branch
+		 * we want to not create it if already
+		 * unregistered devices
+		*/
+		int i;
+		for (i=0;i<max_probes;i++)
+		{
+			unregister_kprobe(&kps[i]);
+		}
 	}
-	
-	fname[MAX_FILE_NAME_LENGTH - 1] = '\0'; // NULL byte at end of string
-	
-	printk(KERN_INFO "Filed opened: name = %s\n", fname);
-	return 0;
 }
 
 static int __init hook_init(void)
 {
-	/* ret variable for returning value of init function */
 	int ret;
 
-	/* Set up creation of new processes function */
-	kp_do_fork.pre_handler = handler_pre_do_fork;
-	kp_do_fork.symbol_name = HOOK_PROCESS_FORK;
+	/* More logic */
 
-	/* Registering kprobe, which sets up an interrupt before calling function */
-	ret = register_kprobe(&kp_do_fork);
-	if (ret < 0) // Error
-	{
-		printk(KERN_INFO "Failed to register do_fork,goodbye\n");
-		goto end;
-	}
-
-	/* Set up termination of process function */
-	kp_do_exit.pre_handler = handler_pre_do_exit;
-	kp_do_exit.symbol_name = HOOK_PROCESS_EXIT;
-
-	ret = register_kprobe(&kp_do_exit);
+	ret = register_probes();
 	if (ret < 0)
-	{
-		unregister_kprobe(&kp_do_fork);
-		printk(KERN_INFO "Failed to register do_exit, bey bye\n");
 		goto end;
-	}
-
-	/* Set up opening of a file function */
-	kp_sys_open.pre_handler = handler_pre_sys_open;
-	kp_sys_open.symbol_name = HOOK_FILE_OPEN;
-
-	ret = register_kprobe(&kp_sys_open);
-	if (ret < 0)
-	{
-		unregister_kprobe(&kp_do_fork);
-		unregister_kprobe(&kp_do_exit);
-		printk(KERN_INFO "Failed to register sys_open, byeee\n");
-		goto end;
-	}
-
-	printk(KERN_INFO "Finished hooking succusfully\n");
 end:
 	return ret;
 }
 
 static void __exit hook_exit(void)
 {
-	unregister_kprobe(&kp_do_fork);
-	unregister_kprobe(&kp_do_exit);
-	unregister_kprobe(&kp_sys_open);
+	unregister_probes(PROBES_SIZE);
 	printk(KERN_INFO "Unregisterd kernel probes");
 }
 
