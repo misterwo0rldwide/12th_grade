@@ -8,6 +8,7 @@
  */
 
 #include "headers.h"
+#include "protocol.h"
 
 #define HOOK_PROCESS_EXIT "do_exit"
 #define HOOK_PROCESS_FORK "kernel_clone" // Originally named 'do_fork'
@@ -16,7 +17,6 @@
  * 				 	    Hooking such function will crash the computer
  */
 
-#define MAX_FILE_NAME_LENGTH 256
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Omer Kfir");
@@ -27,6 +27,7 @@ static int handler_pre_do_exit(struct kprobe*, struct pt_regs*);
 static int register_probes(void);
 static void unregister_probes(int);
 
+/* Enum of all kprobes, each kprobe value is the index inside the array */
 typedef enum {kp_do_fork, kp_do_exit, PROBES_SIZE} kernel_probes;
 
 /* Kprobes structures */
