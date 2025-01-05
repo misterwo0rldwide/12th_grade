@@ -13,7 +13,8 @@
 
 /* IPV4 tcp connection */
 #include <linux/net.h> // Kernel functions for network
-#include <net/socket.h> // Kernel socket structure
+#include <linux/socket.h> // Kernel socket structure
+#include <net/sock.h> // Kernel socket structures
 #include <linux/in.h> // IP structures
 #include <linux/inet.h> // Internet addresses manipulatutions
 

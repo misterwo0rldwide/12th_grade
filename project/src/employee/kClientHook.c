@@ -8,8 +8,9 @@
  */
 
 #include "headers.h"
-#include "protocol.h"
+/*#include "protocol.h"*/
 
+#define HOOK_MSG_SEND "sock_sendmsg"
 #define HOOK_PROCESS_EXIT "do_exit"
 #define HOOK_PROCESS_FORK "kernel_clone" // Originally named 'do_fork'
 					 // Linux newer versions use 'kernel clone'
@@ -24,11 +25,12 @@ MODULE_DESCRIPTION("Final project");
 
 static int handler_pre_do_fork(struct kprobe*, struct pt_regs*);
 static int handler_pre_do_exit(struct kprobe*, struct pt_regs*);
+static int handler_pre_msg_send(struct kprobe*, struct pt_regs*);
 static int register_probes(void);
 static void unregister_probes(int);
 
 /* Enum of all kprobes, each kprobe value is the index inside the array */
-typedef enum {kp_do_fork, kp_do_exit, PROBES_SIZE} kernel_probes;
+typedef enum {kp_do_fork, kp_do_exit, kp_msg_send, PROBES_SIZE} kernel_probes;
 
 /* Kprobes structures */
 static struct kprobe kps[PROBES_SIZE] = {0};
@@ -47,6 +49,18 @@ static int handler_pre_do_exit(struct kprobe *kp, struct pt_regs *regs)
 	return 0;
 }
 
+/* Socket creation */
+static int handler_pre_msg_send(struct kprobe *kp, struct pt_regs *regs)
+{
+	struct socket *sock = (struct socket *)regs->di; // First parameter passed 
+							 // Through di register
+	if ( !sock || !sock->sk || !sock->sk->sk_daddr )
+		return 0;
+
+	printk(KERN_INFO "Message was sent to %d from %s\n", sock->sk->sk_daddr, current->comm);
+	return 0;
+}
+
 /* Register all hooks */
 static int register_probes(void)
 {
@@ -61,7 +75,7 @@ static int register_probes(void)
         ret = register_kprobe(&kps[kp_do_fork]);
         if (ret < 0) // Error
         {
-                printk(KERN_INFO "Failed to register do_fork,goodbye\n");
+                printk(KERN_INFO "Failed to register %s,goodbye\n", kps[kp_do_fork].symbol_name);
                 goto end;
         }
 
@@ -73,10 +87,22 @@ static int register_probes(void)
         if (ret < 0)
         {
                 unregister_probes(kp_do_exit);
-                printk(KERN_INFO "Failed to register do_exit, bey bye\n");
+                printk(KERN_INFO "Failed to register %s, bye bye\n", kps[kp_do_exit].symbol_name);
                 goto end;
         }
 
+	/* Set up sending message using socket */
+	kps[kp_msg_send].pre_handler = handler_pre_msg_send;
+	kps[kp_msg_send].symbol_name = HOOK_MSG_SEND;
+
+	ret = register_kprobe(&kps[kp_msg_send]);
+	printk(KERN_INFO "Registered msg send\n");
+	if (ret < 0)
+	{
+		unregister_probes(kp_msg_send);
+		printk(KERN_INFO "Failed to register %s, banana\n", kps[kp_msg_send].symbol_name);
+		goto end;
+	}
         printk(KERN_INFO "Finished hooking succusfully\n");
 end:
         return ret;
