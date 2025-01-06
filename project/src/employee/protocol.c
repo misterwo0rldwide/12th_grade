@@ -78,6 +78,6 @@ int tcp_send_msg(struct socket *sock, const char *msg)
 /* Close socket struct */
 void tcp_sock_close(struct socket *sock)
 {
-	if ( !sock )
+	if ( sock )
 		sock_release(sock);
 }
