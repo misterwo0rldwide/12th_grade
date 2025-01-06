@@ -11,18 +11,21 @@
 /* Initialize a TCP struct socket */
 struct socket* tcp_sock_create()
 {
-	struct socket *sock;
-	int err;
+    struct socket *sock;
+    int err;
+    
+    /* Create tcp socket */
+    err = sock_create(AF_INET, SOCK_STREAM, IPPROTO_TCP, &sock);
+    if (err < 0) {
+        printk(KERN_ERR "Failed to create TCP socket\n");
+        return ERR_PTR(err);
+    }
 
-	/* Create tcp socket */
-	err = sock_create(AF_INET, SOCK_STREAM, IPPROTO_TCP, &sock);
-	if ( err < 0 )
-	{
-		printk(KERN_ERR "Failed to create TCP socket\n");
-		return ERR_PTR(err); // Special macro for error pointers
-	}
-
-	return sock;
+    /* Set 0.5 second timeout for recv/connect/send */
+    sock->sk->sk_sndtimeo = msecs_to_jiffies(500);
+    sock->sk->sk_rcvtimeo = msecs_to_jiffies(500);
+    
+    return sock;
 }
 
 
