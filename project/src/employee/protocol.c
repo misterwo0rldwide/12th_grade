@@ -9,7 +9,7 @@
 #include "headers.h"
 
 /* Initialize a TCP struct socket */
-struct socket* tcp_sock_create()
+struct socket* tcp_sock_create(void)
 {
     struct socket *sock;
     int err;
