@@ -38,6 +38,9 @@ static struct kprobe kps[PROBES_SIZE] = {0};
 /* Fork hook */
 static int handler_pre_do_fork(struct kprobe *kp, struct pt_regs *regs)
 {
+	if ( !current )
+		return 0;
+	
 	printk(KERN_INFO "do fork was called: process name = %s\n", current->comm);
 	return 0;
 }
@@ -45,6 +48,9 @@ static int handler_pre_do_fork(struct kprobe *kp, struct pt_regs *regs)
 /* Process termination hook */
 static int handler_pre_do_exit(struct kprobe *kp, struct pt_regs *regs)
 {
+	if ( !current )
+		return 0;
+	
 	printk(KERN_INFO "do exit was called: process name = %s\n", current->comm);
 	return 0;
 }
@@ -54,7 +60,8 @@ static int handler_pre_msg_send(struct kprobe *kp, struct pt_regs *regs)
 {
 	struct socket *sock = (struct socket *)regs->di; // First parameter passed 
 							 // Through di register
-	if ( !sock || !sock->sk || !sock->sk->sk_daddr )
+	printk(KERN_INFO "Got to msg_send\n"); // Remove later
+	if ( !sock || !sock->sk || !sock->sk->sk_daddr || !current )
 		return 0;
 
 	printk(KERN_INFO "Message was sent to %d from %s\n", sock->sk->sk_daddr, current->comm);
