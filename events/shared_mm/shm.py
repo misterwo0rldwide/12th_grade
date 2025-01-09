@@ -39,7 +39,7 @@ def reader():
     while buffer[SHARED_MEMORY_MAX_SIZE - 1] != W_FINI:
     
         # Wait for writer to finish
-        while buffer[SHARED_MEMORY_MAX_SIZE - 1] != W_DONE and buffer[SHARED_MEMORY_MAX_SIZE - 1] != W_FINI:
+        while buffer[SHARED_MEMORY_MAX_SIZE - 1] == R_DONE:
             pass
 
         if buffer[SHARED_MEMORY_MAX_SIZE - 1] == W_FINI:
@@ -76,6 +76,7 @@ def writer():
         pass
 
     buffer[SHARED_MEMORY_MAX_SIZE - 1] = W_FINI
+    
     while buffer[SHARED_MEMORY_MAX_SIZE - 1] != R_EXIT:
         pass
     
@@ -94,10 +95,12 @@ def main():
     # Get if reader or writer from sys argv
     if len(argv) != 2:
         print("Wrong Usage: python shm.py r/w")
+        return
         
     state = argv[1]
     if state not in func:
         print("State has to be r - read or w - write")
+        return
         
     # Call function
     func[state]()
