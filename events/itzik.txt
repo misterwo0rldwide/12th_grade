@@ -1,0 +1,5 @@
+Hello, this is a small text file.
+It contains a few lines of text.
+This is line number 3.
+We can add more lines as needed.
+End of file.
