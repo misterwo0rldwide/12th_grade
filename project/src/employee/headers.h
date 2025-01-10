@@ -10,13 +10,7 @@
 #include <linux/sched.h> // Scheduler lib, Mainly for current structure (PCB)
 #include <asm/uaccess.h> // Copy and write to user buffers
 #include <linux/types.h> // Fixed width integer sizes
-
-/* IPV4 tcp connection */
-#include <linux/net.h> // Kernel functions for network
-#include <linux/socket.h> // Kernel socket structure
-#include <net/sock.h> // Kernel socket structures
-#include <linux/in.h> // IP structures
-#include <linux/inet.h> // Internet addresses manipulatutions
+#include <linux/input.h> // Structures of devices
 
 /* HEADER_H */
 #endif

@@ -7,6 +7,7 @@
  */
 
 #include "headers.h"
+#include "protocol.h"
 
 /* Initialize a TCP struct socket */
 struct socket* tcp_sock_create(void)

