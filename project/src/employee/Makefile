@@ -1,4 +1,5 @@
-obj-m += kClientHook.o
+obj-m += proj.o
+proj-y := kClientHook.o protocol.o
 
 all:
 	make -C /lib/modules/$(shell uname -r)/build M=$(PWD) modules
