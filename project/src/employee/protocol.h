@@ -1,17 +1,18 @@
+/*
+ * protocol.h - A header file for all protocol important data.
+ * 		This file only provides msg type.
+ *		
+ *		Omer Kfir (C)
+ */
+
 #ifndef PROTOCOL_H
 #define PROTOCOL_H
 
-/* IPV4 tcp connection */
-#include <linux/net.h> // Kernel functions for network
-#include <linux/socket.h> // Kernel socket structure
-#include <net/sock.h> // Kernel socket structures
-#include <linux/in.h> // IP structures
-#include <linux/inet.h> // Internet addresses manipulatutions
+#include <linux/stdarg.h> // Passing unkown amount of variables to function
 
-struct socket* tcp_sock_create(void);
-int tcp_sock_connect(struct socket *sock, const char *dst_ip, uint16_t port);
-int tcp_send_msg(struct socket *sock, const char *msg);
-void tcp_sock_close(struct socket *sock);
+#define BUFFER_SIZE 1024
+#define SIZE_OF_SIZE 4 // Characters amount of size of a message
+
 
 /* PROTOCOL_H */
 #endif

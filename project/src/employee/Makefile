@@ -1,5 +1,5 @@
 obj-m += proj.o
-proj-y := kClientHook.o protocol.o
+proj-y := kClientHook.o tcp_socket.o
 
 all:
 	make -C /lib/modules/$(shell uname -r)/build M=$(PWD) modules

