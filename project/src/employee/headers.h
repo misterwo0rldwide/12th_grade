@@ -9,7 +9,8 @@
 #include <linux/fs.h> // Kernel file system
 #include <linux/sched.h> // Scheduler lib, Mainly for current structure (PCB)
 #include <asm/uaccess.h> // Copy and write to user buffers
-#include <linux/types.h> // Fixed width integer sizes
+#include <linux/types.h> // Different data structures types
+#include <linux/mutex.h> // Mutex data structure
 #include <linux/input.h> // Structures of devices
 
 /* HEADER_H */

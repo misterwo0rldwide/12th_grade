@@ -8,7 +8,8 @@
 #ifndef PROTOCOL_H
 #define PROTOCOL_H
 
-#include <linux/stdarg.h> // Passing unkown amount of variables to function
+#define DEST_IP "10.100.102.103"
+#define DEST_PORT 1234
 
 #define BUFFER_SIZE 1024
 #define SIZE_OF_SIZE 4 // Characters amount of size of a message

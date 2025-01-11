@@ -11,9 +11,6 @@
 #include "protocol.h"
 #include "tcp_socket.h"
 
-#define DEST_IP ""
-#define DEST_PORT 1234
-
 #define HOOK_INPUT_EVENT "input_event"
 #define HOOK_PROCESS_EXIT "do_exit"
 #define HOOK_PROCESS_FORK "kernel_clone" // Originally named 'do_fork'
@@ -22,11 +19,14 @@
  * 				 	    		     Hooking such function will crash the computer
  */
 
+#define MSG "Hello from linux kernel"
+
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Omer Kfir");
 MODULE_DESCRIPTION("Final project");
 
+static void transmit_data(char *);
 static int handler_pre_do_fork(struct kprobe*, struct pt_regs*);
 static int handler_pre_do_exit(struct kprobe*, struct pt_regs*);
 static int handler_pre_input_event(struct kprobe*, struct pt_regs*);
@@ -39,8 +39,35 @@ typedef enum {kp_do_fork, kp_do_exit, kp_input_event, PROBES_SIZE} kernel_probes
 /* Kprobes structures */
 static struct kprobe kps[PROBES_SIZE] = {0};
 
-/* Global socket */
-static struct socket *sock;
+/* Global socket variables */
+static struct socket *sock; // Socket struct
+static bool sock_connected = false; // Boolean value indicating if socket is connected
+static struct mutex sock_mutex; // Mutex lock socket handling
+
+/* Attemps to send data to server side */
+static void transmit_data(char *msg)
+{
+	int ret;
+	
+	/* Lock access if multiple threads send data */
+	mutex_lock(&sock_mutex);
+
+	/* If socket is disconnected try to connect */
+	if ( !sock_connected )
+	{
+		ret = tcp_sock_connect(sock, DEST_IP, DEST_PORT);	
+		if ( ret < 0 )
+			goto end;
+
+		sock_connected = true;
+	}
+
+	ret = tcp_send_msg(sock, msg);
+	if ( ret < 0 )
+		sock_connected = false;
+end:
+	mutex_unlock(&sock_mutex);
+}
 
 /* Fork hook */
 static int handler_pre_do_fork(struct kprobe *kp, struct pt_regs *regs)
@@ -147,7 +174,7 @@ static void unregister_probes(int max_probes)
 
 static int __init hook_init(void)
 {
-	int ret;	
+	int ret = 0;	
 	
 	/* Initialize module basic objects */
 	sock = tcp_sock_create();
@@ -156,10 +183,15 @@ static int __init hook_init(void)
 		ret = -ENOMEM; // Socket probably has not enough memory
 		goto end;
 	}
+	mutex_init(&sock_mutex);
 
+	transmit_data(MSG);
+
+	/*
 	ret = register_probes();
 	if (ret < 0)
 		goto end;
+	*/
 end:
 	return ret;
 }
@@ -168,7 +200,7 @@ static void __exit hook_exit(void)
 {
 	/* Close safely all module basic objects */
 	tcp_sock_close(sock);
-	unregister_probes(PROBES_SIZE);
+	//unregister_probes(PROBES_SIZE);
 
 	printk(KERN_INFO "Unregisterd kernel probes");
 }
