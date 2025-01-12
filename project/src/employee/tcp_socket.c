@@ -55,17 +55,15 @@ int tcp_sock_connect(struct socket *sock, const char *dst_ip, uint16_t port)
 
 
 /* Send message through a TCP socket */
-int tcp_send_msg(struct socket *sock, const char *msg)
+int tcp_send_msg(struct socket *sock, const char *msg, size_t length)
 {
 	struct msghdr msg_met = { 0 };
 	struct kvec vec;
-	int err, length;
+	int err;
 
 	/* Validate arguemnts */
 	if ( !sock || !msg )
 		return -EINVAL; // Invalid argument passed
-
-	length = strlen(msg);
 
 	/* I/O Vector for message tranfering */
 	vec.iov_base = (void *)msg;

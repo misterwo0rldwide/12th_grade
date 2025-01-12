@@ -9,9 +9,9 @@
 #include <linux/inet.h> // Internet addresses manipulatutions
 
 struct socket* tcp_sock_create(void);
-int tcp_sock_connect(struct socket *sock, const char *dst_ip, uint16_t port);
-int tcp_send_msg(struct socket *sock, const char *msg);
-void tcp_sock_close(struct socket *sock);
+int tcp_sock_connect(struct socket*, const char*, uint16_t);
+int tcp_send_msg(struct socket*, const char*, size_t);
+void tcp_sock_close(struct socket *);
 
 /* TCP_SOCK_H */
 #endif

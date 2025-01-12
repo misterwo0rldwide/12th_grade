@@ -8,12 +8,22 @@
 #ifndef PROTOCOL_H
 #define PROTOCOL_H
 
-#define DEST_IP "10.100.102.103"
-#define DEST_PORT 1234
+#include <linux/stdarg.h> // Handling unkown amount of arguments
 
+/* Message types */
+#define MSG_PROCESS_CLOSE "MPC"
+#define MSG_PROCESS_OPEN "MPO"
+#define MSG_INPUT_EVENT "MIE"
+
+/* Destination information */
+#define DEST_IP "10.100.102.103"
+#define DEST_PORT 6734
+
+/* Protocol buffer handling */
 #define BUFFER_SIZE 1024
 #define SIZE_OF_SIZE 4 // Characters amount of size of a message
 
+int protocol_format(char *dst, const char* format, ...);
 
 /* PROTOCOL_H */
 #endif
