@@ -13,7 +13,7 @@ void workqueue_message(struct workqueue_struct *workqueue, void (*queued_functio
 {
         struct wq_msg *work;
 
-        /* Because we are only able to send the pointer to work_struct
+        /* Because we are only able to send the pointer to workqueue
         * We will create a 'father' struct for it, which will contain it
         * And in the function we will perform container_of in order to get
         * The message itself and the length
