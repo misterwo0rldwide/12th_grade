@@ -1,4 +1,5 @@
 https://github.com/abysamross/simple-linux-kernel-tcp-client-server/blob/master/network_client.c - network client in kernel module
+https://docs.kernel.org/core-api/workqueue.html - workqueue suggested by claud
 digital whisper -
 https://www.digitalwhisper.co.il/files/Zines/0x7C/DW124-5-LinuxKernelKeyLogger.pdf
 https://www.digitalwhisper.co.il/files/Zines/0x7D/DW125-2-LinuxRootkit-Part2.pdf
