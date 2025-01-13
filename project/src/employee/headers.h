@@ -12,6 +12,8 @@
 #include <linux/types.h> // Different data structures types
 #include <linux/mutex.h> // Mutex data structure
 #include <linux/input.h> // Structures of devices
+#include <linux/workqueue.h> // Smart work queue implementation for different tasks
+#include <linux/slab.h> // Linux memory allocation
 
 /* HEADER_H */
 #endif

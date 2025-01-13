@@ -19,17 +19,15 @@
  * 				 	    		     Hooking such function will crash the computer
  */
 
-#define MSG "Hello from linux kernel"
-
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Omer Kfir");
 MODULE_DESCRIPTION("Final project");
 
-static void transmit_data(void);
+static void transmit_data(struct work_struct *work);
 static int handler_pre_do_fork(struct kprobe*, struct pt_regs*);
 static int handler_pre_do_exit(struct kprobe*, struct pt_regs*);
-static int handler_pre_input_event(struct kprobe*, struct pt_regs*);
+//static int handler_pre_input_event(struct kprobe*, struct pt_regs*);
 static int register_probes(void);
 static void unregister_probes(int);
 
@@ -43,47 +41,96 @@ static struct kprobe kps[PROBES_SIZE] = {0};
 static struct socket *sock; // Socket struct
 static bool sock_connected = false; // Boolean value indicating if socket is connected
 static struct mutex sock_mutex; // Mutex lock socket handling
-static char sock_msg_buf[BUFFER_SIZE]; // Buffer for socket communication
-static int sock_msg_len; // Current message length
+static struct workqueue_struct *tcp_sock_wq; // Workqueue for sending tcp socket messages
+
+typedef struct wq_msg
+{
+	/* Current mission */
+	struct work_struct work;
+
+	/* Message dara for sending data */
+	char msg_buf[BUFFER_SIZE];
+	size_t length;
+}wq_msg;
 
 /* Attemps to send data to server side */
-static void transmit_data(void)
+static void transmit_data(struct work_struct *work)
 {
+	struct wq_msg *curr_msg = container_of(work, wq_msg, work);
 	int ret;
 
-	/* If socket is disconnected try to connect */
-	if ( !sock_connected )
-	{
-		/* When a socket disconnects a new socket needs to be created */
-		sock = tcp_sock_create();
+    	mutex_lock(&sock_mutex);
 
-		ret = tcp_sock_connect(sock, DEST_IP, DEST_PORT);	
-		printk(KERN_INFO "%d\n", ret);
-		if ( ret < 0 )
-			return;
+    	/* If socket is disconnected try to connect */
+    	if ( !sock_connected ) 
+    	{
+        	/* When a socket disconnects a new socket needs to be created */
+        	sock = tcp_sock_create();
+        	if ( IS_ERR(sock) ) 
+		{
+            		sock = NULL;
+            		goto end;
+        	}
 
+        	ret = tcp_sock_connect(sock, DEST_IP, DEST_PORT);    
+        	if ( ret < 0 ) 
+		{
+            		tcp_sock_close(sock);
+            		sock = NULL;
+            		goto end;
+        	}
 		sock_connected = true;
-	}
+    	}
 
-	ret = tcp_send_msg(sock, sock_msg_buf, sock_msg_len);
-	if ( ret < 0 )
-		sock_connected = false;
+    	ret = tcp_send_msg(sock, curr_msg->msg_buf, curr_msg->length);
+    	if ( ret < 0 ) 
+    	{
+        	sock_connected = false;
+        	tcp_sock_close(sock);
+        	sock = NULL;
+    	}
+
+end:
+    	mutex_unlock(&sock_mutex);
+    	kfree(curr_msg);  // Free the work structure
+}
+
+/* Queue a new message to be sent */
+static void workqueue_message(const char *msg, size_t length)
+{
+    	struct wq_msg *work;
+
+    	/* Because we are only able to send the pointer to work_struct
+     	* We will create a 'father' struct for it, which will contain it
+     	* And in the function we will perform container_of in order to get
+     	* The message itself and the length
+     	*/
+    	work = kmalloc(sizeof(wq_msg), GFP_ATOMIC);
+    	if ( !work )
+        	return;
+
+    	/* Initialize the work queue to push to queue */
+    	INIT_WORK(&work->work, transmit_data);
+
+    	memcpy(work->msg_buf, msg, min(length, BUFFER_SIZE - 1));
+    	work->length = min(length, BUFFER_SIZE - 1);
+
+    	/* Thread safe function (dont worry :) )*/
+	queue_work(tcp_sock_wq, &work->work);
 }
 
 /* Fork hook */
 static int handler_pre_do_fork(struct kprobe *kp, struct pt_regs *regs)
 {
+    	char msg_buf[BUFFER_SIZE];
+    	size_t msg_length;
+	
 	if ( !current )
 		return 0;
-	/*	
-        mutex_lock(&sock_mutex);
-
-	sock_msg_len = protocol_format(sock_msg_buf, "%s~%s", MSG_PROCESS_OPEN, current->comm);
-	//if ( sock_msg_len > 0)
-        //        transmit_data();
-
-        mutex_unlock(&sock_mutex);
-	*/
+	
+	msg_length = protocol_format(msg_buf, "%s~%s", MSG_PROCESS_OPEN, current->comm);
+	if ( msg_length > 0)
+		workqueue_message(msg_buf, msg_length);
 
 	return 0;
 }
@@ -91,22 +138,22 @@ static int handler_pre_do_fork(struct kprobe *kp, struct pt_regs *regs)
 /* Process termination hook */
 static int handler_pre_do_exit(struct kprobe *kp, struct pt_regs *regs)
 {
+        char msg_buf[BUFFER_SIZE];
+        size_t msg_length;
+
 	if ( !current )
 		return 0;
 	
-	mutex_lock(&sock_mutex);
-	
-	sock_msg_len = protocol_format(sock_msg_buf, "%s~%s", MSG_PROCESS_CLOSE, current->comm);
-	//printk(KERN_INFO "Process close: %s %d\n", sock_msg_buf, sock_msg_len);
-	if ( sock_msg_len > 0)
-		transmit_data();
+	msg_length = protocol_format(msg_buf, "%s~%s", MSG_PROCESS_CLOSE, current->comm);
+        if ( msg_length > 0)
+                workqueue_message(msg_buf, msg_length);
 
-	mutex_unlock(&sock_mutex);
+        return 0;
 
-	return 0;
 }
 
 /* Device input events */
+/*
 static int handler_pre_input_event(struct kprobe *kp, struct pt_regs *regs)
 {
 	if ( !regs ) // Checking current is irrelevant due to interrupts
@@ -118,7 +165,7 @@ static int handler_pre_input_event(struct kprobe *kp, struct pt_regs *regs)
 	printk(KERN_INFO "Device Named: %s | Device code: %d\n", dev->name, code);
 	return 0;
 }
-
+*/
 /* Register all hooks */
 static int register_probes(void)
 {
@@ -193,27 +240,36 @@ static void unregister_probes(int max_probes)
 
 static int __init hook_init(void)
 {
-	int ret = 0;	
-	
-	/* Initialize module basic objects */
-	sock = tcp_sock_create();
-	if (IS_ERR(sock))
-	{
-		ret = -ENOMEM; // Socket probably has not enough memory
-		goto end;
-	}
-	mutex_init(&sock_mutex);
+    	int ret = 0;    
 
-	ret = register_probes();
-	if (ret < 0)
-		goto end;
+    	/* Create workqueue */
+    	tcp_sock_wq = create_singlethread_workqueue("tcp_sock_queue");
+    	if ( !tcp_sock_wq ) 
+	{
+        	ret = -ENOMEM;
+        	goto end;
+    	}
+
+    	mutex_init(&sock_mutex);
+
+    	ret = register_probes();
+    	if ( ret < 0 )
+        	goto cleanup_wq;
+
+    	return 0;
+
+cleanup_wq:
+    	destroy_workqueue(tcp_sock_wq);
 end:
-	return ret;
+    	return ret;
 }
 
 static void __exit hook_exit(void)
 {
 	/* Close safely all module basic objects */
+    	flush_workqueue(tcp_sock_wq);
+    	destroy_workqueue(tcp_sock_wq);
+
 	tcp_sock_close(sock);
 	unregister_probes(PROBES_SIZE);
 

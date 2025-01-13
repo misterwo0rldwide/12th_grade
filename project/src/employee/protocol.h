@@ -20,7 +20,7 @@
 #define DEST_PORT 6734
 
 /* Protocol buffer handling */
-#define BUFFER_SIZE 1024
+#define BUFFER_SIZE 512
 #define SIZE_OF_SIZE 4 // Characters amount of size of a message
 
 int protocol_format(char *dst, const char* format, ...);
