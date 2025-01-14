@@ -47,7 +47,7 @@ class MessageParser:
         msg_buf = MessageParser.encode_str(msg_type)
         
         for argument in args:
-            msg_buf += PROTOCOL_SEPARATOR + encode_str(argument)
+            msg_buf += MessageParser.PROTOCOL_SEPARATOR + MessageParser.encode_str(argument)
         
         return msg_buf
         
@@ -62,7 +62,10 @@ class MessageParser:
             @msg -> Byte stream
         """
         
-        return msg.split(PROTOCOL_SEPARATOR)
+        if msg != b'':
+            msg = msg.split(MessageParser.PROTOCOL_SEPARATOR)
+        
+        return msg
         
 
 class TCPsocket:
@@ -100,7 +103,7 @@ class TCPsocket:
         self.__sock.bind((bind_ip, bind_port))
         self.__sock.listen(server_listen)
     
-    def server_socket_recv_client(self) -> socket.socket:
+    def server_socket_recv_client(self) -> tuple[socket.socket, tuple[str, int]]:
         """
             Server receives new client
             
@@ -111,8 +114,8 @@ class TCPsocket:
             @dst_port -> Destination Port of server
         """
         
-        client__sock, _ = self.__sock.accept()
-        return client__sock
+        client_sock, client_address = self.__sock.accept()
+        return client_sock, client_address
         
     
     def client_socket_connect_server(self, dst_ip : str, dst_port : int) -> None:
@@ -138,7 +141,7 @@ class TCPsocket:
         
         self.__sock.close()
 
-    def __log(self, prefix : str, data: Union[bytes, str], max_to_print: int=DEBUG_PRINT_LEN) -> None:
+    def log(self, prefix : str, data: Union[bytes, str], max_to_print: int=DEBUG_PRINT_LEN) -> None:
         """
             Prints 'max_to_print' amount of data from 'data'
             
@@ -203,12 +206,13 @@ class TCPsocket:
         data_len = self.__recv_amount(self.MSG_LEN_LEN) #  Recv length of message
 
         if data_len == b'':
-            return
+            return data_len
+        
         data_len = int(data_len)
 
         # Recv actual message and log it
         data = self.__recv_amount(data_len)
-        self.__log("Receive", data)
+        self.log("Receive", data)
         
         return data
 
@@ -237,13 +241,13 @@ class TCPsocket:
         
         # Send data and log it
         self.__sock.sendall(data)
-        self.__log("Sent", data)
+        self.log("Sent", data)
     
     
 
 class client (TCPsocket):
     
-    def __init__(self, sock: Optional[socket.socket] = None):
+    def __init__(self, sock: Optional[socket.socket] = None, address = None):
         """
             Create the client side socket
             socket type: TCP
@@ -255,6 +259,24 @@ class client (TCPsocket):
         """
         
         super().__init__(sock)
+        
+        # Address is only passed when a client connects to server side
+        # Any other situation the whoever uses the client class won't need to pass address
+        # Since he will be the client itself and already knows its address
+        
+        if address != None:
+            self.__addr = address
+    
+    
+    def get_address(self) -> str:
+        """
+            Returns client's address
+            
+            INPUT: None
+            OUTPUT: Address of client
+        """
+        
+        return self.__addr
     
     def connect(self, dst_ip : str, dst_port : int) -> None:
         """
@@ -271,7 +293,7 @@ class client (TCPsocket):
             self.client_socket_connect_server(dst_ip, dst_port)
         
         except (ConnectionRefusedError, socket.timeout):
-            self.__log("Error", "Failed to connect to server")
+            self.log("Error", "Failed to connect to server")
             self.close()
     
     def protocol_recv(self) -> list[bytes]:
@@ -296,7 +318,7 @@ class client (TCPsocket):
             @args -> The rest of the data to be sent in the message
         """
         
-        constr_msg = MessageParser.protocol_message_construct(msg_type, args)
+        constr_msg = MessageParser.protocol_message_construct(msg_type, *args)
         self.send(constr_msg)
 
 class server (TCPsocket):
@@ -327,5 +349,5 @@ class server (TCPsocket):
             OUTPUT: Client object
         """
         
-        c = client(self.server_socket_recv_client())
+        c = client(*self.server_socket_recv_client())
         return c
