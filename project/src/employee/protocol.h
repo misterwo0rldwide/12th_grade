@@ -15,7 +15,7 @@
 #define MSG_PROCESS_OPEN "MPO"
 #define MSG_INPUT_EVENT "MIE"
 
-#define PROTOCOL_SEPERATOR "\x1f"
+#define PROTOCOL_SEPARATOR "\x1f"
 
 /* Destination information */
 #define DEST_IP "10.100.102.103"

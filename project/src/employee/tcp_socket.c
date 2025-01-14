@@ -12,21 +12,21 @@
 /* Initialize a TCP struct socket */
 struct socket* tcp_sock_create(void)
 {
-    struct socket *sock;
-    int err;
+    	struct socket *sock;
+    	int err;
     
-    /* Create tcp socket */
-    err = sock_create(AF_INET, SOCK_STREAM, IPPROTO_TCP, &sock);
-    if (err < 0) {
-        printk(KERN_ERR "Failed to create TCP socket\n");
-        return ERR_PTR(err);
-    }
+    	/* Create tcp socket */
+    	err = sock_create(AF_INET, SOCK_STREAM, IPPROTO_TCP, &sock);
+    	if (err < 0) {
+        	printk(KERN_ERR "Failed to create TCP socket\n");
+        	return ERR_PTR(err);
+    	}
 
-    /* Set 0.5 second timeout for recv/connect/send */
-    sock->sk->sk_sndtimeo = msecs_to_jiffies(500);
-    sock->sk->sk_rcvtimeo = msecs_to_jiffies(500);
-    
-    return sock;
+    	/* Set 0.5 second timeout for recv/connect/send */
+    	sock->sk->sk_sndtimeo = msecs_to_jiffies(500);
+    	sock->sk->sk_rcvtimeo = msecs_to_jiffies(500);
+
+	return sock;
 }
 
 
@@ -47,8 +47,10 @@ int tcp_sock_connect(struct socket *sock, const char *dst_ip, uint16_t port)
 
 	// 0 - Means no specific use of the socket (Writing/Receving)
 	err = sock->ops->connect(sock, (struct sockaddr *)&addr, sizeof(addr), 0);
-	if ( err < 0 )
-		printk(KERN_ERR "Failed to connect socket to address '%s'\n", dst_ip);
+	if ( err < 0  && err != -EINPROGRESS )
+		return err;
+
+	// Implement waiting till timeout connection
 
 	return err;
 }
