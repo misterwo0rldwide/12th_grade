@@ -11,6 +11,60 @@ from typing import Optional, Tuple, Union
 DEBUG_PRINT_LEN = 50
 DEBUG_FLAG = False
 
+class MessageParser:
+    PROTOCOL_SEPARATOR = b"\x1f"
+
+    # Message types
+    MSG_PROCESS_OPEN = "MPO"
+    MSG_PROCESS_CLOSE = "MPC"
+    
+    """
+        Decorator staticmethod does not block a function to be called through an instance
+        Rather it ensures that simply not pass a self object to the function even if function called through instance
+    """
+    
+    @staticmethod
+    def encode_str(msg : Union[bytes, str]) -> bytes:
+        """ Encodes a message """
+    
+        if type(msg) == str:
+            msg = msg.encode()
+        
+        return msg
+    
+    @staticmethod
+    def protocol_message_construct(msg_type : str, *args):
+        """
+            Constructs a message to be sent by protocol rules
+            
+            INPUT: msg_type, *args (Uknown amount of arguments)
+            OUTPUT: None
+            
+            @msg_type -> Message type of the message to be sent
+            @args -> The rest of the data to be sent in the message
+        """
+        
+        msg_buf = MessageParser.encode_str(msg_type)
+        
+        for argument in args:
+            msg_buf += PROTOCOL_SEPARATOR + encode_str(argument)
+        
+        return msg_buf
+        
+    @staticmethod
+    def protocol_message_deconstruct(msg : bytes) -> list[bytes]:
+        """
+            Constructs a message to be sent by protocol rules
+            
+            INPUT: msg
+            OUTPUT: List of fields in msg seperated by protocol
+            
+            @msg -> Byte stream
+        """
+        
+        return msg.split(PROTOCOL_SEPARATOR)
+        
+
 class TCPsocket:
     MSG_LEN_LEN = 4
 
@@ -219,12 +273,37 @@ class client (TCPsocket):
         except (ConnectionRefusedError, socket.timeout):
             self.__log("Error", "Failed to connect to server")
             self.close()
+    
+    def protocol_recv(self) -> list[bytes]:
+        """
+            Recevies data from connected side and splits it by protocol
+            
+            INPUT: None
+            OUTPUT: List of byte streams
+        """
+        
+        data = MessageParser.protocol_message_deconstruct(self.recv())
+        return data
+        
+    def protocol_send(self, msg_type, *args) -> None:
+        """
+            Sends a message constructed by protocll
+            
+            INPUT: msg_type, *args (Uknown amount of arguments)
+            OUTPUT: None
+            
+            @msg_type -> Message type of the message to be sent
+            @args -> The rest of the data to be sent in the message
+        """
+        
+        constr_msg = MessageParser.protocol_message_construct(msg_type, args)
+        self.send(constr_msg)
 
 class server (TCPsocket):
     SERVER_BIND_IP   = "0.0.0.0"
     SERVER_BIND_PORT = 6734
 
-    def __init__(self, server_listen : int):
+    def __init__(self, server_listen : int = 5):
         """
             Create the server side socket
             socket type: TCP
