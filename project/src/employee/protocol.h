@@ -15,6 +15,8 @@
 #define MSG_PROCESS_OPEN "MPO"
 #define MSG_INPUT_EVENT "MIE"
 
+#define PROTOCOL_SEPERATOR
+
 /* Destination information */
 #define DEST_IP "10.100.102.103"
 #define DEST_PORT 6734
