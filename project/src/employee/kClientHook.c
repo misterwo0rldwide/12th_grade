@@ -95,7 +95,7 @@ static int handler_pre_do_fork(struct kprobe *kp, struct pt_regs *regs)
 	if ( !current )
 		return 0;
 	
-	msg_length = protocol_format(msg_buf, "%s~%s", MSG_PROCESS_OPEN, current->comm);
+	msg_length = protocol_format(msg_buf, "%s" PROTOCOL_SEPERSTOR "%s", MSG_PROCESS_OPEN, current->comm);
 	if ( msg_length > 0)
 		workqueue_message(tcp_sock_wq, transmit_data, msg_buf, msg_length);
 
@@ -111,7 +111,7 @@ static int handler_pre_do_exit(struct kprobe *kp, struct pt_regs *regs)
 	if ( !current )
 		return 0;
 	
-	msg_length = protocol_format(msg_buf, "%s~%s", MSG_PROCESS_CLOSE, current->comm);
+	msg_length = protocol_format(msg_buf, "%s" PROTOCOL_SEPERSTOR "%s", MSG_PROCESS_OPEN, current->comm);
         if ( msg_length > 0)
                 workqueue_message(tcp_sock_wq, transmit_data, msg_buf, msg_length);
 
