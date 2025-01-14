@@ -34,6 +34,32 @@ def process_client_data(client : protocol.client, data_fields : list[bytes]) -> 
     # For now we don't have any thing to process so just print
     print(client.get_address()[0], *data_fields)
 
+
+def remove_disconnected_client(client : protocol.client) -> None:
+    """
+        Removes a client from global list of clients that are connected
+        
+        INPUT: client
+        OUTPUT: None
+        
+        @client -> Protocol client object
+    """
+    
+    # Search for client thread in list
+    # Lock even when searching since list can change by the time finished
+    # Searching and going to remove
+    
+    with clients_recv_lock:
+        
+        # Search for client in clients list
+        for index in range(len(clients_connected)):
+            _, client_object = clients_connected[index]
+            
+            if client_object == client:
+                del clients_connected[index]
+                break
+                
+
 def get_clients_hooked_data(client : protocol.client) -> None:
     """
         Gets connected client data from hooked functions
@@ -54,19 +80,7 @@ def get_clients_hooked_data(client : protocol.client) -> None:
     
         process_client_data(client, data)
     
-    # Search for client thread in list
-    # Lock even when searching since list can change by the time finished
-    # Searching and going to remove
-    
-    with clients_recv_lock:
-        
-        # Search for client in clients list
-        for index in range(len(clients_connected)):
-            _, client_object = clients_connected[index]
-            
-            if client_object == client:
-                del clients_connected[index]
-                break
+    remove_disconnected_client(client)
     
     # If removed and now amount of clients is one below max
     # We can let the main thread which receives clients to get
