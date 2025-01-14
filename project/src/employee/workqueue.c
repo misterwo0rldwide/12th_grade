@@ -26,8 +26,8 @@ void workqueue_message(struct workqueue_struct *workqueue, void (*queued_functio
         INIT_WORK(&work->work, queued_function);
 
 	/* Copy data to wq_msg metadata */
-        memcpy(work->msg_buf, msg, min(length, BUFFER_SIZE - 1));
-        work->length = min(length, BUFFER_SIZE - 1);
+	work->length = min(length, BUFFER_SIZE - 1);
+        memcpy(work->msg_buf, msg, work->length);
 
         /* Push work to workqueue - thread safe function (dont worry :) )*/
         queue_work(workqueue, &work->work);
